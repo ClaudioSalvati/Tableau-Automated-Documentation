@@ -1,0 +1,142 @@
+import pandas as pd
+import networkx as nx
+import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+from networkx.drawing.nx_agraph import graphviz_layout
+
+# Load the CSV data into a pandas DataFrame
+data = pd.read_csv(output_csv_file_path)
+
+# Create a directed graph
+G = nx.DiGraph()
+
+# Add nodes and edges
+for _, row in data.iterrows():
+    dashboard = row['Dashboard Name']
+    worksheet = row['Worksheet Name']
+    # column = row['Column Caption'] if pd.notnull(row['Column Caption']) and row['Column Caption'] != '' else row['Column Name']
+    
+    G.add_node(dashboard)
+    G.add_node(worksheet)
+    # G.add_node(column)
+    
+    G.add_edge(dashboard, worksheet)
+    # G.add_edge(worksheet, column)
+
+# Visualization 1: Using matplotlib
+plt.figure(figsize=(12, 8))
+pos = nx.spring_layout(G, seed=42)
+nx.draw_networkx_nodes(G, pos, node_size=2000, node_color='lightblue')
+nx.draw_networkx_edges(G, pos, width=1.0, edge_color='gray', alpha=0.7)
+nx.draw_networkx_labels(G, pos, font_size=8, font_color='black')
+plt.title('Directed Acyclic Graph (DAG) of Data Dependencies')
+plt.axis('off')
+plt.show()
+
+# Visualization 2: Using matplotlib with filtered data
+dashboard_names = ["Folie 1 - Monade1", "Folie 2", "Folie 5 - 2"]
+filtered_data = data[data['Dashboard Name'].isin(dashboard_names)]
+G_filtered = nx.DiGraph()
+for _, row in filtered_data.iterrows():
+    dashboard = row['Dashboard Name']
+    worksheet = row['Worksheet Name']
+    G_filtered.add_node(dashboard)
+    G_filtered.add_node(worksheet)
+    G_filtered.add_edge(dashboard, worksheet)
+
+plt.figure(figsize=(30, 20))
+pos_filtered = nx.random_layout(G_filtered)
+nx.draw_networkx_nodes(G_filtered, pos_filtered, node_size=5000, node_color='lightblue')
+nx.draw_networkx_edges(G_filtered, pos_filtered, width=1.0, edge_color='gray', alpha=0.7)
+nx.draw_networkx_labels(G_filtered, pos_filtered, font_size=8, font_color='black')
+plt.title('Directed Acyclic Graph (DAG) of Data Dependencies (Filtered)')
+plt.axis('off')
+plt.show()
+
+# Visualization 3: Using Plotly
+def hierarchy_pos(G, root=None, width=0.1, vert_gap=0.5, vert_loc=0, xcenter=0.5):
+    pos = _hierarchy_pos(G, root, width, vert_gap, vert_loc, xcenter)
+    return pos
+
+def _hierarchy_pos(G, root, width=0.5, vert_gap=0.5, vert_loc=1, xcenter=0.5, pos=None, parent=None, parsed=[]):
+    if pos is None:
+        pos = {root: (vert_loc, xcenter)}
+    else:
+        pos[root] = (vert_loc, xcenter)
+    children = list(G.neighbors(root))
+    if not isinstance(G, nx.DiGraph) and parent is not None:
+        children.remove(parent)
+    if len(children) != 0:
+        dx = width / len(children) /20
+        nextx = xcenter - width/2
+        for child in children:
+            nextx += dx
+            pos = _hierarchy_pos(G, child, width=dx, vert_gap=vert_gap,
+                                 vert_loc=vert_loc-vert_gap, xcenter=nextx,
+                                 pos=pos, parent=root, parsed=parsed)
+    return pos
+
+roots = [node for node, in_degree in G.in_degree() if in_degree == 0]
+if len(roots) > 1:
+    width_per_root = 1.0 / len(roots)
+    for index, root in enumerate(roots):
+        root_pos = hierarchy_pos(G, root=root, xcenter=index*width_per_root + width_per_root/2)
+        pos.update(root_pos)
+else:
+    pos = hierarchy_pos(G, root=roots[0])
+
+edge_x = []
+edge_y = []
+for edge in G.edges():
+    x0, y0 = pos[edge[0]]
+    x1, y1 = pos[edge[1]]
+    edge_x.extend([x0, x1, None])
+    edge_y.extend([y0, y1, None])
+
+edge_trace = go.Scatter(
+    x=edge_x, y=edge_y,
+    line=dict(width=0.5, color='#888'),
+    hoverinfo='none',
+    mode='lines')
+
+node_x = [pos[node][0] for node in G.nodes()]
+node_y = [pos[node][1] for node in G.nodes()]
+
+node_trace = go.Scatter(
+    x=node_x, y=node_y,
+    mode='markers+text',
+    hoverinfo='text',
+    text=list(G.nodes()),
+    marker=dict(
+        showscale=False,
+        colorscale='YlGnBu',
+        size=10,
+        colorbar=dict(
+            thickness=15,
+            title='Node Connections',
+            xanchor='left',
+            titleside='right'
+        ),
+        line_width=2))
+
+fig = go.Figure(data=[edge_trace, node_trace],
+             layout=go.Layout(
+                title='Tree Diagram',
+                showlegend=False,
+                hovermode='closest',
+                margin=dict(b=0, l=0, r=0, t=40),
+                xaxis=dict(
+                    showgrid=False,
+                    zeroline=False,
+                    showticklabels=False,
+                    range=[-1, 1]  
+                ),
+                yaxis=dict(
+                    showgrid=False,
+                    zeroline=False,
+                    showticklabels=False,
+                    range=[-0.1, 1.1]
+                ))
+                )
+fig.write_image("tree_diagram.jpeg")
+fig.write_html("tree_diagram.html")
