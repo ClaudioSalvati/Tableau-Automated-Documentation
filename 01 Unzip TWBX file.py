@@ -1,7 +1,6 @@
 zip_filepath = r"<PATH>" # Path to the twbx file
 base_dest_dir = r">PATH>" # Path to the output directory
 file_extension = ".twb"
-structure_XML = f"{base_dest_dir}\TWB_XML_structure.txt" # Output file for the XML structure
 
 import zipfile
 import os
